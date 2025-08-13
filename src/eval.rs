@@ -101,7 +101,7 @@ fn eval_built_in_form(
         Expr::Ident(i) => match i.as_ref() {
             "do" => Some(eval_do_args(arg_forms, env)),
             "if" => Some(eval_if_args(arg_forms, env)),
-            "def" => Some(eval_def_args(arg_forms, env)),
+            "let" => Some(eval_let_args(arg_forms, env)),
             "src" => Some(eval_src_args(arg_forms, env)),
             "cat" => Some(eval_cat_args(arg_forms, env)),
             "fn" => Some(eval_lambda_args(arg_forms)),
@@ -257,23 +257,23 @@ fn eval_if_args(
     }
 }
 
-fn eval_def_args(
+fn eval_let_args(
     arg_forms: &[Expr],
     env: &mut Env,
 ) -> Result<Expr, Error> {
     let first_form = arg_forms.first()
-        .ok_or_else(|| Error::Reason("def: Expected first form.".to_string()))?;
+        .ok_or_else(|| Error::Reason("let: Expected first form.".to_string()))?;
 
     let first_str = match first_form {
         Expr::Ident(i) => Ok(i.clone()),
-        _ => Error::Reason("def: Expected first form to be an ident".to_string()).into(),
+        _ => Error::Reason("let: Expected first form to be an ident".to_string()).into(),
     }?;
 
     let second_form = arg_forms.get(1)
-        .ok_or_else(|| Error::Reason("def: Expected second form.".to_string()))?;
+        .ok_or_else(|| Error::Reason("let: Expected second form.".to_string()))?;
 
     if arg_forms.len() > 2 {
-        return Error::Reason("def: can only have two forms.".to_string()).into();
+        return Error::Reason("let: can only have two forms.".to_string()).into();
     }
 
     let second_eval = eval(second_form, env)?;

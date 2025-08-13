@@ -1,5 +1,5 @@
 
-(def fact (fn (n) 
+(let fact (fn (n)
     (do (if (= 1 n) n 
         (* n (fact (- n 1)))))))
 
