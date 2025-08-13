@@ -1,10 +1,10 @@
 
 use core::fmt;
-use std::ops::{self, Div};
-use std::str::FromStr;
+use core::ops::{Div, Mul, Sub, Add};
+use core::str::FromStr;
 use core::f64;
 
-use malachite::{rational::Rational, Integer, Float, Natural};
+use malachite::Integer;
 use malachite::base::num::basic::traits::{One, Zero};
 
 use crate::error::Error;
@@ -12,7 +12,6 @@ use crate::error::Error;
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Num {
     Int(Integer),
-    //Rat(Rational),
     Fp (f64),
 }
 
@@ -31,79 +30,163 @@ impl Num {
         f64::consts::PI.into()
     }
 
+    pub fn e() -> Num {
+        f64::consts::E.into()
+    }
+
     pub fn is_float(&self) -> bool {
         match &self {
-            Self::Fp(_) => true,
+            Num::Fp(_) => true,
             _ => false,
         }
     }
 
     pub fn is_integer(&self) -> bool {
         match &self {
-            Self::Int(_) => true,
+            Num::Int(_) => true,
             _ => false,
         }
     }
 
-    /// Converts the internal representation into a rational number.
+    /// Converts the internal representation into a float number.
     pub fn float(self) -> Num {
         match self {
-            Self::Int(n) => Self::Fp(f64::from_str(&n.to_string()).unwrap_or_default()),
-            Self::Fp(n) => Self::Fp(n),
+            Num::Int(n) => Num::Fp(f64::from_str(&n.to_string()).unwrap_or_default()),
+            Num::Fp(n) => Num::Fp(n),
         }
     }
 
     /// Converts the internal representation into an integer.
     pub fn integer(self) -> Num {
         match self {
-            Self::Int(n) => Self::Int(n),
-            Self::Fp(n) => {
-                Natural::from_bits(n as i128)
+            Num::Int(n) => Num::Int(n),
+            Num::Fp(n) => {
+                Num::Int((n as i128).into())
             },
+        }
+    }
+
+    pub fn ln(self) -> Num {
+        match self {
+            Num::Fp(f) => Num::Fp(f.ln()),
+            _ => self.float().ln(),
+        }
+    }
+
+    pub fn log2(self) -> Num {
+        match self {
+            Num::Fp(f) => Num::Fp(f.log2()),
+            _ => self.float().log2(),
+        }
+    }
+
+    pub fn log10(self) -> Num {
+        match self {
+            Num::Fp(f) => Num::Fp(f.log10()),
+            _ => self.float().log10(),
+        }
+    }
+
+    pub fn log(self, other: Num) -> Num {
+        match (self, other) {
+            (Num::Fp(fs), Num::Fp(fo)) => Num::Fp(fs.log(fo)),
+            (s, o) => s.float().log(o.float()),
+        }
+    }
+
+    pub fn pow(self, n: &Num) -> Num {
+        match n {
+            Num::Int(int) => {
+                match self {
+                    Num::Int(n) => {
+                        let mut count = int.clone();
+                        let mut prod = n.clone();
+                        while count.gt(&Integer::ZERO) {
+                            prod *= n.clone();
+                            count -= Integer::ONE;
+                        }
+                        Num::Int(prod)
+                    },
+                    Num::Fp(n) => {
+                        let mut count = int.clone();
+                        let mut prod = n;
+                        while count.gt(&f64::ZERO) {
+                            prod *= n;
+                            count -= Integer::ONE;
+                        }
+                        Num::Fp(prod)
+                    },
+                }
+            },
+            Num::Fp(f) => {
+                let flt = match self.float() {
+                    Num::Fp(f) => f,
+                    _ => unreachable!(),
+                };
+                Num::Fp(flt.powf(*f))
+            },
+        }
+    }
+
+    pub(crate) fn sqrt(self) -> Num {
+        match self {
+            Num::Fp(f) => Num::Fp(f.sqrt()),
+            _ => self.float().sqrt(),
+        }
+    }
+
+    pub(crate) fn exp(self) -> Num {
+        Num::e().pow(&self)
+    }
+
+    pub(crate) fn abs(self) -> Num {
+        match self {
+            Num::Fp(f) => Num::Fp(f.abs()),
+            Num::Int(n) => Num::Int(n.unsigned_abs_ref().into())
         }
     }
 }
 
-impl ops::Div for Num {
+impl Div for Num {
     type Output = Num;
     fn div(self, rhs: Self) -> Self::Output {
         use Num::*;
         match (self, rhs) {
-            (Rat(l), Rat(r)) => Rat(l.div(r)),
-            (l, r) => l.rational().div(r.rational()),
+            (Int(l), Int(r)) => Int(l.div(r)),
+            (l, r) => l.float().div(r.float()),
         }
     }
 }
 
-impl ops::Mul for Num {
+impl Mul for Num {
     type Output = Num;
     fn mul(self, rhs: Self) -> Self::Output {
         use Num::*;
         match (self, rhs) {
-            (Rat(l), Rat(r)) => Rat(l.mul(r)),
-            (l, r) => l.rational().mul(r.rational()),
+            (Int(l), Int(r)) => Int(l.mul(r)),
+            (l, r) => l.float().mul(r.float()),
         }
     }
 }
 
-impl ops::Sub for Num {
+impl Sub for Num {
     type Output = Num;
     fn sub(self, rhs: Self) -> Self::Output {
         use Num::*;
         match (self, rhs) {
-            (Rat(l), Rat(r)) => Rat(l.sub(r)),
-            (l, r) => l.rational().sub(r.rational()),
+            (Int(l), Int(r)) => Int(l.sub(r)),
+            (l, r) => l.float().sub(r.float()),
         }
     }
 }
 
-impl ops::Add for Num {
+impl Add for Num {
     type Output = Num;
     fn add(self, rhs: Self) -> Self::Output {
         use Num::*;
         match (self, rhs) {
-            (Rat(l), Rat(r)) => Rat(l.add(r)),
-            (l, r) => l.rational().add(r.rational()),
+            (Int(l), Int(r)) => Int(l.add(r)),
+            (l, r) => l.float().add(r.float()),
         }
     }
 }
@@ -111,8 +194,8 @@ impl ops::Add for Num {
 impl fmt::Display for Num {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Num::Rat(i) => write!(f, "{i}"),
-            Num::Int(i) => write!(f, "{i}"),
+            Num::Fp(n) => write!(f, "{n}"),
+            Num::Int(n) => write!(f, "{n}"),
         }
     }
 }
@@ -120,10 +203,17 @@ impl fmt::Display for Num {
 impl FromStr for Num {
     type Err = Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match Rational::from_str(s) {
-            Ok(r) => Ok(Num::Rat(r)),
-            Err(_) => Err(Error::reason("number: unable to convert string to number")),
+        let int_result = Integer::from_str(s);
+        if let Ok(int) = int_result {
+            return Ok(Num::Int(int));
         }
+
+        let fp_result = f64::from_str(s);
+        if let Ok(fp) = fp_result {
+            return Ok(Num::Fp(fp));
+        }
+
+        Error::reason("number: unable to convert string to number").into()
     }
 }
 

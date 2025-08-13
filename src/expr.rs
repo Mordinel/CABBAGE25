@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use crate::{error::Error, number::Num};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     Nil,
     Bool(bool),
@@ -12,8 +12,18 @@ pub enum Expr {
     Char(char),
     String(String),
     List(Vec<Expr>),
-    Func(fn(&[Expr]) -> Result<Expr, Error>),
+    Func(String, fn(&[Expr]) -> Result<Expr, Error>),
     Lambda(Lambda),
+}
+
+impl PartialEq for Expr {
+    fn eq(&self, other: &Self) -> bool {
+        use Expr::*;
+        match (self, other) {
+            (Func(sn, _sp), Func(on, _op)) => sn.eq(on),
+            (s, o) => s.eq(o),
+        }
+    }
 }
 
 impl fmt::Display for Expr {
@@ -32,7 +42,7 @@ impl fmt::Display for Expr {
                     .intersperse(",".to_string())
                     .collect::<String>(),
             ),
-            Expr::Func(_fun) => format!("Function {{}}"),
+            Expr::Func(name, _fun) => format!("Function {{{name}}}"),
             Expr::Lambda(_l) => format!("Lambda {{}}"),
         };
         write!(f, "{}", str)

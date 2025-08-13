@@ -60,15 +60,15 @@ fn parse_literal(token: &Token) -> Result<Expr, Error> {
             kind: LiteralKind::Int { base, empty_int }
         } => {
             if empty_int {
-                return Ok(Expr::Number(Num::Int(0)));
+                return Ok(Expr::Number(Num::Int(0.into())));
             }
-            if let Ok(n) = i64::from_str_radix(&token.data, match base {
+            if let Ok(n) = i128::from_str_radix(&token.data, match base {
                 Base::Binary => 2,
                 Base::Octal => 8,
                 Base::Decimal => 10,
                 Base::Hexadecimal => 16,
             }) {
-                return Ok(Expr::Number(Num::Int(n)));
+                return Ok(Expr::Number(Num::Int(n.into())));
             }
             return Error::reason("literal: Failed to parse Integer.").into();
         },
@@ -78,8 +78,8 @@ fn parse_literal(token: &Token) -> Result<Expr, Error> {
             if base != Base::Decimal {
                 return Error::reason("literal: Can only parse floats as decimal.").into();
             }
-            if let Ok(n) = token.data.parse::<Float>() {
-                return Ok(Expr::Number(Num::Fp()));
+            if let Ok(n) = token.data.parse::<f64>() {
+                return Ok(Expr::Number(Num::Fp(n)));
             }
             return Error::reason("literal: Failed to parse float.").into();
         },

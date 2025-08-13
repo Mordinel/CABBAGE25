@@ -44,7 +44,7 @@ pub fn eval(exp: &Expr, env: &mut Env) -> Result<Expr, Error> {
                 None => {
                     let first_eval = eval(first_form, env)?;
                     match first_eval {
-                        Func(f) => f(
+                        Func(_name, f) => f(
                             &arg_forms.iter()
                                 .map(|xpr| eval(xpr, env))
                                 .collect::<Result<Vec<Expr>, Error>>()?
@@ -61,7 +61,7 @@ pub fn eval(exp: &Expr, env: &mut Env) -> Result<Expr, Error> {
             }
         },
 
-        Func(_) => Error::Reason("Unexpected form.".to_string()).into(),
+        Func(_, _) => Error::Reason("Unexpected form.".to_string()).into(),
         Lambda(_) => Error::Reason("Unexpected form.".to_string()).into(),
     }
 }
