@@ -1,7 +1,8 @@
 [package]
-name = "dedd"
+name = "cabbage25"
 version = "0.1.0"
 edition = "2024"
+publish = false
 
 [dependencies]
 malachite = { version = "0.6.1", features = ["floats"] }
