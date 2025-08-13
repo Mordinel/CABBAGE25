@@ -101,7 +101,7 @@ impl Num {
                     Num::Int(n) => {
                         let mut count = int.clone();
                         let mut prod = n.clone();
-                        while count.gt(&Integer::ZERO) {
+                        while count.gt(&Integer::ONE) {
                             prod *= n.clone();
                             count -= Integer::ONE;
                         }
@@ -110,7 +110,7 @@ impl Num {
                     Num::Fp(n) => {
                         let mut count = int.clone();
                         let mut prod = n;
-                        while count.gt(&f64::ZERO) {
+                        while count.gt(&f64::ONE) {
                             prod *= n;
                             count -= Integer::ONE;
                         }
