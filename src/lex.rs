@@ -1,7 +1,10 @@
-use std::str::Chars;
 
-pub fn lex(input: &str) -> Vec<Token> {
-    let mut cursor = Cursor::new(input);
+use std::collections::VecDeque;
+use std::str::Chars;
+use crate::str_ext::*;
+
+pub fn lex(file_name: &str, input: &str) -> Vec<Token> {
+    let mut cursor = Cursor::new(file_name, input);
     let mut vec = vec![];
     loop {
         let token = cursor.advance_token();
@@ -21,15 +24,22 @@ pub fn lex(input: &str) -> Vec<Token> {
 #[derive(Debug)]
 pub struct Token {
     pub kind: TokenKind,
-    pub data: String,
+    offset: u32,
+    len: u16,
 }
 
 impl Token {
-    pub fn new(kind: TokenKind, data: &str) -> Token {
+    pub fn new(kind: TokenKind, offset: u32, len: u16) -> Token {
         Token {
             kind,
-            data: data.to_string(),
+            offset,
+            len,
         }
+    }
+
+    /// returns the offset into the file and the length of the token
+    pub fn pos(&self) -> (usize, usize) {
+        (self.offset as usize, self.len as usize)
     }
 }
 
@@ -41,8 +51,8 @@ pub fn keyword(c: char, string: &str) -> Option<TokenKind> {
         ('i', "f") => If,
         ('f', "n") => Fn,
         ('n', "il") => Nil,
+        ('l', "et") => Let,
         ('d', "o") => Do,
-        ('d', "ef") => Def,
         ('p', "rintln") => Println,
         ('p', "rint") => Print,
         ('t', "rue") => True,
@@ -57,7 +67,7 @@ pub enum TokenKind {
     If,
     Do,
     Fn,
-    Def,
+    Let,
     Nil,
     True,
     False,
@@ -86,7 +96,8 @@ pub enum TokenKind {
     /// ";"
     Semi,
     /// ":"
-    Colon, /// ","
+    Colon, 
+    /// ","
     Comma,
     /// "."
     Dot,
@@ -163,7 +174,7 @@ pub enum TokenKind {
     /// "xor"
     Xor,
     /// "^"
-    Exponent,
+    Power,
 
     /// "%"
     Mod,
@@ -204,23 +215,26 @@ pub enum Base {
 /// Next characters can be peeked via `first` method, 
 /// and position can be shifted forward via `bump` method.
 pub struct Cursor<'src> {
+    chars_consumed: usize,
     len_remaining: usize,
+    errors: Errors<'src>,
     chars: Chars<'src>,
     source: &'src str,
 }
 
 pub(crate) const EOF_CHAR: char = '\0';
 
-
 use TokenKind::*;
 use LiteralKind::*;
 
 impl Cursor<'_> {
     pub fn advance_token(&mut self) -> Token {
-        let start = self.source.len() - self.len_remaining;
         let first_char = match self.bump() {
             Some(c) => c,
-            None => return Token::new(TokenKind::Eof, ""),
+            None => {
+                let (start, _) = self.token_pos();
+                return Token::new(TokenKind::Eof, start as u32, 0)
+            },
         };
         let token_kind = match first_char {
             '/' => match self.first() {
@@ -263,7 +277,7 @@ impl Cursor<'_> {
             '|' => BitOr,
             '+' => Plus,
             '*' => Mul,
-            '^' => Exponent,
+            '^' => Power,
             '%' => Mod,
             ';' => self.semi(),
             ':' => Colon,
@@ -300,9 +314,9 @@ impl Cursor<'_> {
             _ => Unknown,
         };
 
+        let (start, _) = self.token_pos();
         let offset = self.pos_within_token();
-        let str = &self.source[(start)..(start + offset as usize)];
-        let res = Token::new(token_kind, str);
+        let res = Token::new(token_kind, start as u32, offset as u16);
         self.reset_pos_within_token();
         res
     }
@@ -580,9 +594,11 @@ impl Cursor<'_> {
 
 #[allow(dead_code)]
 impl<'src> Cursor<'src> {
-    pub fn new(input: &'src str) -> Cursor<'src> {
+    pub fn new(file_name: &'src str, input: &'src str) -> Cursor<'src> {
         Cursor {
+            chars_consumed: 0,
             len_remaining: input.len(),
+            errors: Errors::new(file_name, input),
             chars: input.chars(),
             source: input,
         }
@@ -635,13 +651,20 @@ impl<'src> Cursor<'src> {
         self.chars.as_str().is_empty()
     }
 
+    fn token_pos(&self) -> (usize, usize) {
+        let start = self.chars_consumed;
+        let len = self.pos_within_token();
+        (start, len)
+    }
+
     /// Returns amount of already consumed symbols.
-    pub(crate) fn pos_within_token(&self) -> u32 {
-        (self.len_remaining - self.chars.as_str().len()) as u32
+    pub(crate) fn pos_within_token(&self) -> usize {
+        self.len_remaining - self.chars.as_str().len()
     }
 
     /// Resets the number of bytes consumed to 0.
     pub(crate) fn reset_pos_within_token(&mut self) {
+        self.chars_consumed += self.pos_within_token();
         self.len_remaining = self.chars.as_str().len();
     }
 
@@ -672,6 +695,101 @@ impl<'src> Cursor<'src> {
         while predicate(self.first()) && !self.is_eof() {
             self.bump();
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Error {
+    message: String,
+    offset: usize,
+    len: usize,
+}
+
+impl Error {
+    pub fn new(message: String, offset: usize, len: usize) -> Self {
+        Self {
+            message,
+            offset,
+            len,
+        }
+    }
+
+    fn format(&self, file_name: &str, file_content: &str) -> String {
+        let (line, col) = file_content.pos(self.offset);
+        let substr = file_content.line(line);
+        assert!(col <= substr.len());
+
+        let (left, right) = substr.split_at(col);
+        let (r_left, r_right) = right.split_at(self.len);
+        let substr = format!("{}{}{}", left, r_left, r_right);
+
+        let pad_n = line.to_string().len();
+        let pad_l = vec![' '; pad_n].iter().collect::<String>();
+        let pad_r = vec![' '; col].iter().collect::<String>();
+        let uline = vec!['^'; self.len].iter().collect::<String>();
+
+        format!(
+            "error: {}\n{pad_l}--> {file_name}@{line}:{}\n{line} | {substr}\n{pad_l}   {pad_r}{uline}",
+            self.message,
+            col + 1,
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Errors<'s> {
+    had_error: bool,
+    errors: VecDeque<Error>,
+    pub(crate) source: &'s str,
+    file_name: &'s str,
+}
+
+impl<'s> Errors<'s> {
+    pub fn new(file_name: &'s str, source: &'s str) -> Self {
+        Self {
+            had_error: false,
+            errors: VecDeque::new(),
+            source,
+            file_name,
+        }
+    }
+
+    pub fn push(&mut self, message: &str, offset: usize, len: usize) {
+        self.had_error = true;
+        self.errors.push_back(Error::new(message.to_string(), offset, len));
+    }
+
+    pub fn pop(&mut self) -> Option<Error> {
+        self.errors.pop_front()
+    }
+
+    pub fn report(&self, error: &Error) {
+        eprintln!("{}", error.format(self.file_name, self.source))
+    }
+
+    pub fn report_all(&mut self) {
+        while let Some(err) = self.pop() {
+            self.report(&err);
+        }
+    }
+
+    pub fn had_error(&self) -> bool {
+        self.had_error
+    }
+
+    pub fn reset_errors(&mut self) {
+        self.had_error = false;
+    }
+}
+
+impl Iterator for Errors<'_> {
+    type Item = String;
+    fn next(&mut self) -> Option<Self::Item> {
+        let err = self.errors.pop_front();
+        if let Some(e) = err {
+            return Some(e.format(self.file_name, self.source));
+        }
+        None
     }
 }
 

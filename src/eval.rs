@@ -2,10 +2,21 @@
 use std::{fs, rc::Rc};
 use crate::lex;
 use crate::lex::Token;
-use crate::parse;
+use crate::parse::{self, Parser};
 use crate::env::Env;
 use crate::expr::{Expr, Lambda};
 use crate::error::Error;
+
+pub struct Eval<'src> {
+    parser: Parser<'src>,
+    env: Env<'src>,
+}
+
+impl<'src> Eval<'src> {
+    pub fn new(parser: Parser<'src>, env: Env<'src>) -> Eval<'src> {
+        Eval { parser, env }
+    }
+}
 
 fn env_get(key: &str, env: &Env) -> Option<Expr> {
     match env.data.get(key) {
@@ -24,7 +35,7 @@ pub fn eval(exp: &Expr, env: &mut Env) -> Result<Expr, Error> {
     match exp {
         Ident(key) => {
             env_get(key, env)
-                .ok_or_else(|| Error::Reason(format!("unexpected symbol key='{key}'")))
+                .ok_or_else(|| Error::Reason(format!("eval: unexpected symbol key='{key}'")))
                 .map(|xpr| xpr.clone())
         },
 
@@ -36,7 +47,7 @@ pub fn eval(exp: &Expr, env: &mut Env) -> Result<Expr, Error> {
 
         List(list) => {
             let first_form = list.first()
-                .ok_or_else(|| Error::Reason("Expected a non-empty list".to_string()))?;
+                .ok_or_else(|| Error::reason("eval: Expected a non-empty list"))?;
 
             let arg_forms = &list[1..];
             match eval_built_in_form(first_form, arg_forms, env) {
@@ -55,14 +66,14 @@ pub fn eval(exp: &Expr, env: &mut Env) -> Result<Expr, Error> {
                             &mut env_for_lambda(l.args, arg_forms, env)?
                         ),
 
-                        _ => Error::Reason("First form must be a function".to_string()).into(),
+                        _ => Error::reason("eval: First form must be a function").into(),
                     }
                 }
             }
         },
 
-        Func(_, _) => Error::Reason("Unexpected form.".to_string()).into(),
-        Lambda(_) => Error::Reason("Unexpected form.".to_string()).into(),
+        Func(_, _) => Error::reason("eval: Unexpected form Func.").into(),
+        Lambda(_)  => Error::reason("eval: Unexpected form Lambda.").into(),
     }
 }
 
@@ -186,7 +197,7 @@ fn eval_src_args(
             Ok(cont) => cont,
             Err(why) => return Error::Reason(format!("src: could not read file `{path}`: {why}")).into(),
         };
-        let tokens = lex::lex(&contents);
+        let tokens = lex::lex(path, &contents);
         if let Err(why) = eval_all(&tokens, env) {
             return Error::Reason(format!("src: {why}")).into();
         }
@@ -215,13 +226,13 @@ fn eval_all(tokens: &[Token], env: &mut Env) -> Result<(), Error> {
 
 fn eval_lambda_args(arg_forms: &[Expr]) -> Result<Expr, Error> {
     let params = arg_forms.first()
-        .ok_or_else(|| Error::Reason("fn: Expected args form.".to_string()))?;
+        .ok_or_else(|| Error::reason("fn: Expected args form."))?;
 
     let body = arg_forms.get(1)
-        .ok_or_else(|| Error::Reason("fn: Expected second form.".to_string()))?;
+        .ok_or_else(|| Error::reason("fn: Expected second form."))?;
 
     if arg_forms.len() > 2 {
-        return Error::Reason("fn: can only have two forms.".to_string()).into();
+        return Error::reason("fn: can only have two forms.").into();
     }
 
     Ok(Expr::Lambda(
@@ -237,7 +248,7 @@ fn eval_if_args(
     env: &mut Env,
 ) -> Result<Expr, Error> {
     let test_form = arg_forms.first()
-        .ok_or_else(|| Error::Reason("if: Expected test form".to_string()))?;
+        .ok_or_else(|| Error::reason("if: Expected test form"))?;
 
     let test_eval = eval(test_form, env)?;
     match test_eval {
@@ -262,18 +273,18 @@ fn eval_let_args(
     env: &mut Env,
 ) -> Result<Expr, Error> {
     let first_form = arg_forms.first()
-        .ok_or_else(|| Error::Reason("let: Expected first form.".to_string()))?;
+        .ok_or_else(|| Error::reason("let: Expected first form."))?;
 
     let first_str = match first_form {
         Expr::Ident(i) => Ok(i.clone()),
-        _ => Error::Reason("let: Expected first form to be an ident".to_string()).into(),
+        _ => Error::reason("let: Expected first form to be an ident").into(),
     }?;
 
     let second_form = arg_forms.get(1)
-        .ok_or_else(|| Error::Reason("let: Expected second form.".to_string()))?;
+        .ok_or_else(|| Error::reason("let: Expected second form."))?;
 
     if arg_forms.len() > 2 {
-        return Error::Reason("let: can only have two forms.".to_string()).into();
+        return Error::reason("let: can only have two forms.").into();
     }
 
     let second_eval = eval(second_form, env)?;

@@ -80,59 +80,74 @@ pub struct Env<'outer> {
     pub outer: Option<&'outer Env<'outer>>,
 }
 
-pub fn default_env<'outer>() -> Env<'outer> {
-    let mut data = HashMap::new();
+impl<'outer> Env<'outer> {
+    pub fn get(&self, key: &str) -> Option<Expr> {
+        match self.data.get(key) {
+            Some(expr) => Some(expr.clone()),
+            None => match self.outer {
+                Some(outer) => outer.get(key),
+                None => None,
+            },
+        }
+    }
+}
 
-    data.insert(
-        "print".to_string(),
-        Expr::Func("print".into(), |args| {
-            let first = args.first()
-                .ok_or_else(|| Error::Reason("print: Expected at least one form.".to_string()))?;
-            if args.len() > 1 {
-                return Error::Reason("print: can only have one form.".to_string()).into();
-            }
-            print!("{first}");
-            Ok(Expr::Nil)
-        }),
-    );
+impl<'outer> Default for Env<'outer> {
+    fn default() -> Self {
+        let mut data = HashMap::new();
 
-    data.insert(
-        "println".to_string(),
-        Expr::Func("println".into(), |args| {
-            let first = args.first()
-                .ok_or_else(|| Error::Reason("(println n): Missing first argument.".to_string()))?;
-            if args.len() > 1 {
-                return Error::Reason("(println n): Can only have one argument.".to_string()).into();
-            }
-            println!("{first}");
-            Ok(Expr::Nil)
-        }),
-    );
+        data.insert(
+            "print".to_string(),
+            Expr::Func("print".into(), |args| {
+                let first = args.first()
+                    .ok_or_else(|| Error::reason("(print n): Missing first argument."))?;
+                if args.len() > 1 {
+                    return Error::reason("(print n): Can only have one argument.").into();
+                }
+                print!("{first}");
+                Ok(Expr::Nil)
+            }),
+        );
 
-    comparative_binary_func!( "=", |a, b| a == b, data);
-    comparative_binary_func!( ">", |a, b| a >  b, data);
-    comparative_binary_func!(">=", |a, b| a >= b, data);
-    comparative_binary_func!( "<", |a, b| a <  b, data);
-    comparative_binary_func!("<=", |a, b| a <= b, data);
+        data.insert(
+            "println".to_string(),
+            Expr::Func("println".into(), |args| {
+                let first = args.first()
+                    .ok_or_else(|| Error::reason("(println n): Missing first argument."))?;
+                if args.len() > 1 {
+                    return Error::reason("(println n): Can only have one argument.").into();
+                }
+                println!("{first}");
+                Ok(Expr::Nil)
+            }),
+        );
 
-    numeric_binary_func!(  "+", |l, r| l.add(r.clone()), data);
-    numeric_binary_func!(  "-", |l, r| l.sub(r.clone()), data);
-    numeric_binary_func!(  "*", |l, r| l.mul(r.clone()), data);
-    numeric_binary_func!(  "/", |l, r| l.div(r.clone()), data);
-    numeric_binary_func!(  "^", |l, r| l        .pow(r), data);
-    numeric_binary_func!("log", |l, r| l.log(r.clone()), data);
+        comparative_binary_func!( "=", |a, b| a == b, data);
+        comparative_binary_func!("!=", |a, b| a != b, data);
+        comparative_binary_func!( "<", |a, b| a <  b, data);
+        comparative_binary_func!("<=", |a, b| a <= b, data);
+        comparative_binary_func!( ">", |a, b| a >  b, data);
+        comparative_binary_func!(">=", |a, b| a >= b, data);
 
-    numeric_unary_func! (   "ln", |n: Num| n   .ln(), data);
-    numeric_unary_func! ( "log2", |n: Num| n .log2(), data);
-    numeric_unary_func! ("log10", |n: Num| n.log10(), data);
-    numeric_unary_func! ( "sqrt", |n: Num| n .sqrt(), data);
-    numeric_unary_func! (  "exp", |n: Num| n  .exp(), data);
-    numeric_unary_func! (  "abs", |n: Num| n  .abs(), data);
+        numeric_binary_func!(  "+", |l, r| l.add(r.clone()), data);
+        numeric_binary_func!(  "-", |l, r| l.sub(r.clone()), data);
+        numeric_binary_func!(  "*", |l, r| l.mul(r.clone()), data);
+        numeric_binary_func!(  "/", |l, r| l.div(r.clone()), data);
+        numeric_binary_func!(  "^", |l, r| l        .pow(r), data);
+        numeric_binary_func!("log", |l, r| l.log(r.clone()), data);
 
-    numeric_constant_func!("pi", || Num::pi(), data);
-    numeric_constant_func!( "e", || Num:: e(), data);
+        numeric_unary_func! (   "ln", |n: Num| n   .ln(), data);
+        numeric_unary_func! ( "log2", |n: Num| n .log2(), data);
+        numeric_unary_func! ("log10", |n: Num| n.log10(), data);
+        numeric_unary_func! ( "sqrt", |n: Num| n .sqrt(), data);
+        numeric_unary_func! (  "exp", |n: Num| n  .exp(), data);
+        numeric_unary_func! (  "abs", |n: Num| n  .abs(), data);
 
-    Env { data, outer: None }
+        numeric_constant_func!("pi", || Num::pi(), data);
+        numeric_constant_func!( "e", || Num:: e(), data);
+
+        Env { data, outer: None }
+    }
 }
 
 fn parse_list_of_numbers(args: &[Expr]) -> Result<Vec<Num>, Error> {

@@ -22,6 +22,7 @@ impl From<f64> for Num {
 }
 
 impl Num {
+    #[allow(dead_code)]
     pub fn zero() -> Num {
         Num::Int(Integer::ZERO)
     }
@@ -34,6 +35,7 @@ impl Num {
         f64::consts::E.into()
     }
 
+    #[allow(dead_code)]
     pub fn is_float(&self) -> bool {
         match &self {
             Num::Fp(_) => true,
@@ -41,6 +43,7 @@ impl Num {
         }
     }
 
+    #[allow(dead_code)]
     pub fn is_integer(&self) -> bool {
         match &self {
             Num::Int(_) => true,
@@ -57,6 +60,7 @@ impl Num {
     }
 
     /// Converts the internal representation into an integer.
+    #[allow(dead_code)]
     pub fn integer(self) -> Num {
         match self {
             Num::Int(n) => Num::Int(n),

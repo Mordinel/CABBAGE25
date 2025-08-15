@@ -16,15 +16,16 @@ mod parse;
 mod eval;
 mod number;
 mod unescape;
+mod str_ext;
 
 fn parse_eval(expr: &str, env: &mut env::Env) -> Result<expr::Expr, error::Error> {
-    let (parsed_exp, _) = parse::parse(&lex::lex(expr))?;
+    let (parsed_exp, _) = parse::parse(&lex::lex("<stdin>", expr))?;
     let evaled_exp = eval::eval(&parsed_exp, env)?;
     Ok(evaled_exp)
 }
 
-fn parse_eval_all(expr: &str, env: &mut env::Env) -> Result<expr::Expr, error::Error> {
-    let tokens = lex::lex(expr);
+fn parse_eval_all(path: &str, expr: &str, env: &mut env::Env) -> Result<expr::Expr, error::Error> {
+    let tokens = lex::lex(path, expr);
     let (mut parsed_exp, mut rest) = parse::parse(&tokens)?;
     loop {
         let result = eval::eval(&parsed_exp, env)?;
@@ -93,7 +94,7 @@ fn main() {
             },
         };
         let env = &mut env::default_env();
-        match parse_eval_all(contents.trim(), env) {
+        match parse_eval_all(path, contents.trim(), env) {
             Ok(_) => (),
             Err(err) => match err {
                 error::Error::Reason(reason) => eprintln!("Error: {reason}"),
