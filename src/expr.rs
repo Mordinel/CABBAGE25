@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use number::Number;
 
-use crate::error::Error;
+use crate::{env::Env, error::Error};
 
 #[derive(Debug, Clone)]
 pub enum Expr {

@@ -97,32 +97,6 @@ impl<'outer> Default for Env<'outer> {
     fn default() -> Self {
         let mut data = HashMap::new();
 
-        data.insert(
-            "print".to_string(),
-            Expr::Func("print".into(), |args| {
-                let first = args.first()
-                    .ok_or_else(|| Error::reason("(print n): Missing first argument."))?;
-                if args.len() > 1 {
-                    return Error::reason("(print n): Can only have one argument.").into();
-                }
-                print!("{first}");
-                Ok(Expr::Nil)
-            }),
-        );
-
-        data.insert(
-            "println".to_string(),
-            Expr::Func("println".into(), |args| {
-                let first = args.first()
-                    .ok_or_else(|| Error::reason("(println n): Missing first argument."))?;
-                if args.len() > 1 {
-                    return Error::reason("(println n): Can only have one argument.").into();
-                }
-                println!("{first}");
-                Ok(Expr::Nil)
-            }),
-        );
-
         comparative_binary_func!( "=", |a, b| a == b, data);
         comparative_binary_func!("!=", |a, b| a != b, data);
         comparative_binary_func!( "<", |a, b| a <  b, data);
@@ -130,12 +104,13 @@ impl<'outer> Default for Env<'outer> {
         comparative_binary_func!( ">", |a, b| a >  b, data);
         comparative_binary_func!(">=", |a, b| a >= b, data);
 
-        numeric_binary_func!(  "+", |l, r| l.add(r.clone()), data);
-        numeric_binary_func!(  "-", |l, r| l.sub(r.clone()), data);
-        numeric_binary_func!(  "*", |l, r| l.mul(r.clone()), data);
-        numeric_binary_func!(  "/", |l, r| l.div(r.clone()), data);
-        numeric_binary_func!(  "^", |l, r| l.pow(r.clone()), data);
-        numeric_binary_func!("log", |l, r| l.log_n(r.clone()), data);
+        numeric_binary_func!(    "+", |l, r| l.add(r.clone()), data);
+        numeric_binary_func!(    "-", |l, r| l.sub(r.clone()), data);
+        numeric_binary_func!(    "*", |l, r| l.mul(r.clone()), data);
+        numeric_binary_func!(    "/", |l, r| l.div(r.clone()), data);
+        numeric_binary_func!(    "^", |l, r| l.pow(r.clone()), data);
+        numeric_binary_func!(  "log", |l, r| l.log_n(r.clone()), data);
+        numeric_binary_func!("atan2", |l, r| l.div(r.clone()).atan(), data);
 
         numeric_unary_func! (   "ln", |n: Number| n   .ln(), data);
         numeric_unary_func! ( "log2", |n: Number| n .log2(), data);
@@ -144,10 +119,49 @@ impl<'outer> Default for Env<'outer> {
         numeric_unary_func! (  "exp", |n: Number| n  .exp(), data);
         numeric_unary_func! (  "abs", |n: Number| n  .abs(), data);
 
+        numeric_unary_func! ("sin", |n: Number| n  .sin(), data);
+        numeric_unary_func! ("tan", |n: Number| n  .tan(), data);
+        numeric_unary_func! ("sec", |n: Number| n  .sec(), data);
+        numeric_unary_func! ("cos", |n: Number| n  .cos(), data);
+        numeric_unary_func! ("cot", |n: Number| n  .cot(), data);
+        numeric_unary_func! ("csc", |n: Number| n  .csc(), data);
+
+        numeric_unary_func! ("asin", |n: Number| n  .asin(), data);
+        numeric_unary_func! ("atan", |n: Number| n  .atan(), data);
+        numeric_unary_func! ("asec", |n: Number| n  .asec(), data);
+        numeric_unary_func! ("acos", |n: Number| n  .acos(), data);
+        numeric_unary_func! ("acot", |n: Number| n  .acot(), data);
+        numeric_unary_func! ("acsc", |n: Number| n  .acsc(), data);
+
         numeric_constant_func!("pi", || Number::pi(), data);
         numeric_constant_func!( "e", || Number:: e(), data);
+        numeric_constant_func!( "i", || Number:: i(), data);
 
-        Env { data, outer: None }
+        let mut me = Env { data, outer: None };
+
+        me.data.insert(
+            "print".to_string(),
+            Expr::Func("print".into(), |args| {
+                let s = args.iter()
+                    .map(|x| x.to_string())
+                    .collect::<String>();
+                print!("{s}");
+                Ok(Expr::Nil)
+            }),
+        );
+
+        me.data.insert(
+            "println".to_string(),
+            Expr::Func("println".into(), |args| {
+                let s = args.iter()
+                    .map(|x| x.to_string())
+                    .collect::<String>();
+                println!("{s}");
+                Ok(Expr::Nil)
+            }),
+        );
+
+        me
     }
 }
 

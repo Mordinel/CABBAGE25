@@ -58,7 +58,7 @@ pub fn eval(exp: &Expr, env: &mut Env) -> Result<Expr, Error> {
                         Func(_name, f) => f(
                             &arg_forms.iter()
                                 .map(|xpr| eval(xpr, env))
-                                .collect::<Result<Vec<Expr>, Error>>()?
+                                .collect::<Result<Vec<Expr>, Error>>()?,
                         ),
 
                         Lambda(l) => eval(
