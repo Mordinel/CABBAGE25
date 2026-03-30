@@ -120,19 +120,19 @@ impl<'outer> Default for Env<'outer> {
         numeric_unary_func! (  "abs", |n: Number| n  .abs(), data);
         numeric_unary_func! (    "-", |n: Number| n  .neg(), data);
 
-        numeric_unary_func! ("sin", |n: Number| n  .sin(), data);
-        numeric_unary_func! ("tan", |n: Number| n  .tan(), data);
-        numeric_unary_func! ("sec", |n: Number| n  .sec(), data);
-        numeric_unary_func! ("cos", |n: Number| n  .cos(), data);
-        numeric_unary_func! ("cot", |n: Number| n  .cot(), data);
-        numeric_unary_func! ("csc", |n: Number| n  .csc(), data);
+        numeric_unary_func! ("sin", |n: Number| n.sin(), data);
+        numeric_unary_func! ("tan", |n: Number| n.tan(), data);
+        numeric_unary_func! ("sec", |n: Number| n.sec(), data);
+        numeric_unary_func! ("cos", |n: Number| n.cos(), data);
+        numeric_unary_func! ("cot", |n: Number| n.cot(), data);
+        numeric_unary_func! ("csc", |n: Number| n.csc(), data);
 
-        numeric_unary_func! ("asin", |n: Number| n  .asin(), data);
-        numeric_unary_func! ("atan", |n: Number| n  .atan(), data);
-        numeric_unary_func! ("asec", |n: Number| n  .asec(), data);
-        numeric_unary_func! ("acos", |n: Number| n  .acos(), data);
-        numeric_unary_func! ("acot", |n: Number| n  .acot(), data);
-        numeric_unary_func! ("acsc", |n: Number| n  .acsc(), data);
+        numeric_unary_func! ("asin", |n: Number| n.asin(), data);
+        numeric_unary_func! ("atan", |n: Number| n.atan(), data);
+        numeric_unary_func! ("asec", |n: Number| n.asec(), data);
+        numeric_unary_func! ("acos", |n: Number| n.acos(), data);
+        numeric_unary_func! ("acot", |n: Number| n.acot(), data);
+        numeric_unary_func! ("acsc", |n: Number| n.acsc(), data);
 
         numeric_constant_func!("pi", || Number::pi(), data);
         numeric_constant_func!( "e", || Number:: e(), data);
