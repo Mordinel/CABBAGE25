@@ -2,10 +2,10 @@ use std::rc::Rc;
 
 use crate::error::Error;
 use crate::expr::Expr;
-use crate::number::Num;
 use crate::lex::{Base, Cursor, LiteralKind, Token, TokenKind};
 use crate::str_ext::Substr;
 use crate::unescape::{unescape_char, unescape_unicode, Mode};
+use number::Number;
 
 pub struct Parser<'src> {
     cursor: Cursor<'src>,
@@ -76,7 +76,7 @@ impl<'src> Parser<'src> {
                 kind: LiteralKind::Int { base, empty_int }
             } => {
                 if empty_int {
-                    return Ok(Expr::Number(Num::Int(0.into())));
+                    return Ok(Expr::Number(Number::Discrete(0.into())));
                 }
                 if let Ok(n) = i128::from_str_radix(substr, match base {
                     Base::Binary => 2,
@@ -84,7 +84,7 @@ impl<'src> Parser<'src> {
                     Base::Decimal => 10,
                     Base::Hexadecimal => 16,
                 }) {
-                    return Ok(Expr::Number(Num::Int(n.into())));
+                    return Ok(Expr::Number(Number::Discrete(n.into())));
                 }
                 return Error::reason("literal: Failed to parse Integer.").into();
             },
@@ -95,7 +95,7 @@ impl<'src> Parser<'src> {
                     return Error::reason("literal: Can only parse floats as decimal.").into();
                 }
                 if let Ok(n) = substr.parse::<f64>() {
-                    return Ok(Expr::Number(Num::Fp(n)));
+                    return Ok(Expr::Number(n.into()));
                 }
                 return Error::reason("literal: Failed to parse float.").into();
             },

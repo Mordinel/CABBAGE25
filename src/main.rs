@@ -12,7 +12,6 @@ mod env;
 mod lex;
 mod parse;
 mod eval;
-mod number;
 mod unescape;
 mod str_ext;
 

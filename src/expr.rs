@@ -1,14 +1,16 @@
 use core::fmt;
 use std::rc::Rc;
 
-use crate::{error::Error, number::Num};
+use number::Number;
+
+use crate::error::Error;
 
 #[derive(Debug, Clone)]
 pub enum Expr {
     Nil,
     Bool(bool),
     Ident(String),
-    Number(Num),
+    Number(Number),
     Char(char),
     String(String),
     List(Vec<Expr>),

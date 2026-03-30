@@ -5,4 +5,4 @@ edition = "2024"
 publish = false
 
 [dependencies]
-malachite = { version = "0.6.1", features = ["floats"] }
+number = { git = "https://codeberg.org/Wleddzig/number", version = "0.1.0" }

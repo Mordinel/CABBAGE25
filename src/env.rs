@@ -1,6 +1,7 @@
 use std::{collections::HashMap, ops::{Add, Div, Mul, Sub}};
 
-use crate::{error::Error, expr::Expr, number::Num};
+use crate::{error::Error, expr::Expr};
+use number::Number;
 
 macro_rules! comparative_binary_func {
     ($fname:expr, $check_fn:expr, $data:expr) => {
@@ -13,7 +14,7 @@ macro_rules! comparative_binary_func {
                 let rest = &numbers.get(1..)
                     .ok_or_else(|| Error::Reason(format!("({} n n ...): Missing second number.", $fname)))?;
 
-                fn trunk(prev: &Num, rest: &[Num]) -> bool {
+                fn trunk(prev: &Number, rest: &[Number]) -> bool {
                     match rest.first() {
                         Some(fl) => $check_fn(prev, fl) && trunk(fl, &rest[1..]),
                         None => true,
@@ -133,28 +134,28 @@ impl<'outer> Default for Env<'outer> {
         numeric_binary_func!(  "-", |l, r| l.sub(r.clone()), data);
         numeric_binary_func!(  "*", |l, r| l.mul(r.clone()), data);
         numeric_binary_func!(  "/", |l, r| l.div(r.clone()), data);
-        numeric_binary_func!(  "^", |l, r| l        .pow(r), data);
-        numeric_binary_func!("log", |l, r| l.log(r.clone()), data);
+        numeric_binary_func!(  "^", |l, r| l.pow(r.clone()), data);
+        numeric_binary_func!("log", |l, r| l.log_n(r.clone()), data);
 
-        numeric_unary_func! (   "ln", |n: Num| n   .ln(), data);
-        numeric_unary_func! ( "log2", |n: Num| n .log2(), data);
-        numeric_unary_func! ("log10", |n: Num| n.log10(), data);
-        numeric_unary_func! ( "sqrt", |n: Num| n .sqrt(), data);
-        numeric_unary_func! (  "exp", |n: Num| n  .exp(), data);
-        numeric_unary_func! (  "abs", |n: Num| n  .abs(), data);
+        numeric_unary_func! (   "ln", |n: Number| n   .ln(), data);
+        numeric_unary_func! ( "log2", |n: Number| n .log2(), data);
+        numeric_unary_func! ("log10", |n: Number| n.log10(), data);
+        numeric_unary_func! ( "sqrt", |n: Number| n .sqrt(), data);
+        numeric_unary_func! (  "exp", |n: Number| n  .exp(), data);
+        numeric_unary_func! (  "abs", |n: Number| n  .abs(), data);
 
-        numeric_constant_func!("pi", || Num::pi(), data);
-        numeric_constant_func!( "e", || Num:: e(), data);
+        numeric_constant_func!("pi", || Number::pi(), data);
+        numeric_constant_func!( "e", || Number:: e(), data);
 
         Env { data, outer: None }
     }
 }
 
-fn parse_list_of_numbers(args: &[Expr]) -> Result<Vec<Num>, Error> {
+fn parse_list_of_numbers(args: &[Expr]) -> Result<Vec<Number>, Error> {
     args.iter().map(parse_single_number).collect()
 }
 
-fn parse_single_number(exp: &Expr) -> Result<Num, Error> {
+fn parse_single_number(exp: &Expr) -> Result<Number, Error> {
     match exp {
         Expr::Number(n) => Ok(n.clone()),
         _ => Error::reason("Expected a number").into(),
