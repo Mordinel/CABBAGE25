@@ -67,7 +67,7 @@ fn main() {
 
         let env = &mut env::Env::default();
         loop {
-            print!("({program_name})> ");
+            print!("{program_name} >>> ");
             let expr = slurp_expr();
             if expr.trim().is_empty() {
                 continue;
