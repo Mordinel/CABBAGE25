@@ -6,8 +6,6 @@ use std::ops::Not;
 use std::path::PathBuf;
 use std::process;
 
-use expr::Expr;
-
 mod error;
 mod expr;
 mod env;
@@ -19,20 +17,22 @@ mod unescape;
 mod str_ext;
 
 fn parse_eval(expr: &str, env: &mut env::Env) -> Result<expr::Expr, error::Error> {
-    let (parsed_exp, _) = parse::parse(&lex::lex("<stdin>", expr))?;
+    let mut parser = parse::Parser::new("<stdin>", expr);
+    let (parsed_exp, _) = parser.parse(&lex::lex("<stdin>", expr))?;
     let evaled_exp = eval::eval(&parsed_exp, env)?;
     Ok(evaled_exp)
 }
 
 fn parse_eval_all(path: &str, expr: &str, env: &mut env::Env) -> Result<expr::Expr, error::Error> {
+    let mut parser = parse::Parser::new(path, expr);
     let tokens = lex::lex(path, expr);
-    let (mut parsed_exp, mut rest) = parse::parse(&tokens)?;
+    let (mut parsed_exp, mut rest) = parser.parse(&tokens)?;
     loop {
         let result = eval::eval(&parsed_exp, env)?;
         if rest.is_empty() {
             return Ok(result);
         }
-        (parsed_exp, rest) = parse::parse(&rest)?;
+        (parsed_exp, rest) = parser.parse(&rest)?;
     }
 }
 
@@ -66,7 +66,7 @@ fn main() {
         io::stdout().is_terminal().not().then(no_terminal);
         io::stderr().is_terminal().not().then(no_terminal);
 
-        let env = &mut env::default_env();
+        let env = &mut env::Env::default();
         loop {
             print!("({program_name})> ");
             let expr = slurp_expr();
@@ -74,7 +74,7 @@ fn main() {
                 continue;
             }
             match parse_eval(&expr, env) {
-                Ok(Expr::Nil) => (),
+                Ok(expr::Expr::Nil) => (),
                 Ok(res) => println!("{res}\n"),
                 Err(err) => match err {
                     error::Error::Reason(reason) => eprintln!("Error: {reason}"),
@@ -93,7 +93,7 @@ fn main() {
                 process::exit(1);
             },
         };
-        let env = &mut env::default_env();
+        let env = &mut env::Env::default();
         match parse_eval_all(path, contents.trim(), env) {
             Ok(_) => (),
             Err(err) => match err {

@@ -30,7 +30,7 @@ impl<'src> Parser<'src> {
         }
     }
 
-    pub fn parse_list_of_symbol_strings(&mut self, form: Rc<Expr>) -> Result<Vec<String>, Error> {
+    pub fn parse_list_of_symbol_strings(form: Rc<Expr>) -> Result<Vec<String>, Error> {
         match form.as_ref() {
             Expr::List(l) => Ok(l.clone()),
             _ => Error::Reason("Expected args form to be a list.".to_string()).into(),

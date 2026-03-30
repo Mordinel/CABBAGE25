@@ -2,7 +2,7 @@
 use std::{fs, rc::Rc};
 use crate::lex;
 use crate::lex::Token;
-use crate::parse::{self, Parser};
+use crate::parse::{Parser};
 use crate::env::Env;
 use crate::expr::{Expr, Lambda};
 use crate::error::Error;
@@ -82,7 +82,7 @@ fn env_for_lambda<'outer>(
     arg_forms: &[Expr],
     outer_env: &'outer mut Env,
 ) -> Result<Env<'outer>, Error> {
-    let keys = parse::parse_list_of_symbol_strings(params)?;
+    let keys = Parser::parse_list_of_symbol_strings(params)?;
     if keys.len() != arg_forms.len() {
         return Error::Reason(format!("fn(env): Expected {} arguments, got {}", keys.len(), arg_forms.len())).into();
     }
@@ -198,7 +198,8 @@ fn eval_src_args(
             Err(why) => return Error::Reason(format!("src: could not read file `{path}`: {why}")).into(),
         };
         let tokens = lex::lex(path, &contents);
-        if let Err(why) = eval_all(&tokens, env) {
+        let mut parser = Parser::new(path, &contents);
+        if let Err(why) = eval_all(&mut parser, &tokens, env) {
             return Error::Reason(format!("src: {why}")).into();
         }
     }
@@ -206,10 +207,10 @@ fn eval_src_args(
     Ok(Expr::Nil)
 }
 
-fn eval_all(tokens: &[Token], env: &mut Env) -> Result<(), Error> {
+fn eval_all(parser: &mut Parser, tokens: &[Token], env: &mut Env) -> Result<(), Error> {
     let mut remaining = tokens;
     loop {
-        let (exp, rest) = match parse::parse(remaining) {
+        let (exp, rest) = match parser.parse(remaining) {
             Ok(p) => p,
             Err(why) => return Error::Reason(
                 format!("could not parse program: {why}")
