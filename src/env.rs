@@ -118,7 +118,7 @@ impl<'outer> Default for Env<'outer> {
         numeric_unary_func! ( "sqrt", |n: Number| n .sqrt(), data);
         numeric_unary_func! (  "exp", |n: Number| n  .exp(), data);
         numeric_unary_func! (  "abs", |n: Number| n  .abs(), data);
-        numeric_unary_func! (    "-", |n: Number| n  .neg(), data);
+        numeric_unary_func! (  "neg", |n: Number| n  .neg(), data);
 
         numeric_unary_func! ("sin", |n: Number| n.sin(), data);
         numeric_unary_func! ("tan", |n: Number| n.tan(), data);

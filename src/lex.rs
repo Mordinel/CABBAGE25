@@ -258,6 +258,13 @@ impl Cursor<'_> {
 
             c if is_id_start(c) => self.ident_or_unknown_prefix(c),
 
+            '-' if ('0'..='9').contains(&self.first()) => {
+                let c = self.bump().unwrap();
+                let kind = self.number(c);
+                self.eat_literal_suffix();
+                TokenKind::Literal { kind }
+            },
+
             c @ '0'..='9' => {
                 let kind = self.number(c);
                 self.eat_literal_suffix();
