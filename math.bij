@@ -1,0 +1,13 @@
+(println "Math demo:")
+(do
+  (println "\t 2+3+4+5 = \t" (+ 2 3 4 5))
+  (println "\t10*20*30 = \t" (* 10 20 30))
+  (println "\t   100/7 = \t" (/ 100 7))
+  (println "\t 100/7.0 = \t" (/ 100 7.0))
+  (println "\t  sqrt 2 = \t" (sqrt 2))
+  (println "\t   exp 1 = \t" (exp 1))
+  (println "\t       e = \t" (e))
+  (println "\t acos -1 = \t" (acos (- 0 1)))
+  (println "\t      pi = \t" (pi))
+  (println "\t 2+i * i = \t" (* (+ 2 (i)) (i)))
+)
