@@ -1,33 +1,118 @@
-use std::ops::Neg;
 use std::rc::Rc;
 
 use crate::error::Error;
 use crate::expr::Expr;
-use crate::lex::{Base, Cursor, LiteralKind, Token, TokenKind};
+use crate::lex::{Base, LiteralKind, Token, TokenKind};
 use crate::str_ext::Substr;
 use crate::unescape::{unescape_char, unescape_unicode, Mode};
 use number::Number;
 
+enum Prec {
+    None = 0,
+    Assign,
+    Equality,
+    Compare,
+    AddSub,
+    MulDiv,
+    Power,
+    Call,
+}
+
+impl Prec {
+    fn lbp(&self) -> u8 {
+        match self {
+            Prec::None => 0,
+            Prec::Assign => 1,
+            Prec::Equality => 2,
+            Prec::Compare => 3,
+            Prec::AddSub => 4,
+            Prec::MulDiv => 5,
+            Prec::Power => 6,
+            Prec::Call => 10,
+        }
+    }
+}
+
 pub struct Parser<'src> {
-    cursor: Cursor<'src>,
     source: &'src str,
 }
 
 impl<'src> Parser<'src> {
-    pub fn new(file_name: &'src str, source: &'src str) -> Parser<'src> {
+    pub fn new(source: &'src str) -> Parser<'src> {
         Parser {
-            cursor: Cursor::<'src>::new(file_name, source),
             source,
         }
     }
 
     pub fn parse<'tk>(&mut self, tokens: &'tk [Token]) -> Result<(Expr, &'tk [Token]), Error> {
-        let (token, rest) = tokens.split_first()
-            .ok_or_else(|| Error::Reason("Could not get token".to_string()))?;
-        match token.kind {
-            TokenKind::OpenParen => self.read_seq(rest),
-            TokenKind::CloseParen => Error::Reason("Unexpected `)`.".to_string()).into(),
-            _ => Ok((self.parse_atom(token)?, rest)),
+        self.parse_expr(tokens, Prec::None)
+    }
+
+    fn parse_expr<'tk>(&mut self, tokens: &'tk [Token], min_prec: Prec) -> Result<(Expr, &'tk [Token]), Error> {
+        if tokens.is_empty() {
+            return Error::reason("empty expression").into();
+        }
+
+        let (mut left, mut rest) = self.parse_prefix(tokens)?;
+
+        while let Some(op) = rest.first() {
+            let op_prec = self.precedence(&op.kind);
+            if op_prec.lbp() <= min_prec.lbp() {
+                break;
+            }
+            let (right, new_rest) = self.parse_expr(&rest[1..], op_prec)?;
+            left = self.desugar_infix(op, left, right);
+            rest = new_rest;
+        }
+
+        while let Some(next) = rest.first() {
+            if self.is_start_of_expr(next) {
+                let (arg, new_rest) = self.parse_expr(rest, Prec::Call)?;
+                left = Expr::List(vec![left, arg]);
+                rest = new_rest;
+            } else {
+                break;
+            }
+        }
+
+        Ok((left, rest))
+    }
+
+    fn is_start_of_expr(&self, tok: &Token) -> bool {
+        use TokenKind::*;
+        matches!(
+            tok.kind,
+            Ident | Literal { .. } | OpenParen | OpenBrace | Fn | If | Let
+        )
+    }
+
+    fn precedence(&self, kind: &TokenKind) -> Prec {
+        use TokenKind::*;
+        use Prec::*;
+        match kind {
+            EqEq => Equality,
+            Equals => Assign,
+            Lt | LtEq | Gt | GtEq | NotEq => Compare,
+            Plus | Minus => AddSub,
+            Mul | Div => MulDiv,
+            TokenKind::Power => Prec::Power,
+            _ => Prec::None,
+        }
+    }
+
+    fn parse_prefix<'tk>(&mut self, tokens: &'tk [Token]) -> Result<(Expr, &'tk [Token]), Error> {
+        let (tok, rest) = tokens.split_first()
+            .ok_or_else(|| Error::reason("parse_prefix: unexpected end of input"))?;
+
+        use TokenKind::*;
+        match tok.kind {
+            Let => self.parse_let(rest),
+            Fn => self.parse_fn(rest),
+            If => self.parse_if(rest),
+            Do => self.parse_do(rest),
+            OpenParen => self.parse_grouped(rest),
+            OpenBrace => self.parse_block(rest),
+            _ => Ok((self.parse_atom(tok)?, rest)),
         }
     }
 
@@ -69,7 +154,7 @@ impl<'src> Parser<'src> {
         }
     }
 
-    fn parse_literal(&mut self, token: &Token) -> Result<Expr, Error> {
+    fn parse_literal(&self, token: &Token) -> Result<Expr, Error> {
         let (start, len) = token.pos();
         let substr = self.source.substr(start, len).unwrap();
         match token.kind {
@@ -141,6 +226,135 @@ impl<'src> Parser<'src> {
             },
             _ => todo!(),
         }
+    }
+
+    fn parse_let<'tk>(&mut self, tokens: &'tk [Token]) -> Result<(Expr, &'tk [Token]), Error> {
+        let (name_tok, rest) = tokens.split_first().ok_or_else(|| Error::reason("let: expected name"))?;
+        let name = self.parse_atom(name_tok)?;
+        let (eq, rest) = rest.split_first().ok_or_else(|| Error::reason("let: expected ="))?;
+        if eq.kind != TokenKind::Equals { return Error::reason("let: expected =").into(); }
+        let (value, rest) = self.parse_expr(rest, Prec::None)?;
+        Ok((Expr::List(vec![Expr::Ident("let".to_string()), name, value]), rest))
+    }
+
+    fn parse_fn<'tk>(&mut self, tokens: &'tk [Token]) -> Result<(Expr, &'tk [Token]), Error> {
+        let mut params = vec![];
+        let mut rest = tokens;
+
+        while let Some(tok) = rest.first() {
+            if tok.kind == TokenKind::OpenBrace {
+                break;
+            }
+            let param = self.parse_atom(tok)?;
+            params.push(param);
+            rest = &rest[1..];
+        }
+
+        let (open, new_rest) = rest.split_first()
+            .ok_or_else(|| Error::reason("fn: expected {"))?;
+
+        if open.kind != TokenKind::OpenBrace {
+            return Error::reason("fn: expected {").into();
+        }
+
+        rest = new_rest;
+
+        let (body, new_rest) = self.parse_expr(rest, Prec::None)?;
+
+        let (close, rest) = new_rest.split_first()
+            .ok_or_else(|| Error::reason("fn: expected }"))?;
+        if close.kind != TokenKind::CloseBrace {
+            return Error::reason("fn: expected }").into();
+        }
+
+        let params_list = Expr::List(params);
+        Ok((
+            Expr::List(vec![
+                Expr::Ident("fn".to_string()),
+                params_list,
+                body,
+            ]),
+            rest
+        ))
+    }
+
+    fn parse_if<'tk>(&mut self, tokens: &'tk [Token]) -> Result<(Expr, &'tk [Token]), Error> {
+        let (test, rest) = self.parse_expr(tokens, Prec::None)?;
+
+        let (then_tok, rest) = rest.split_first()
+            .ok_or_else(|| Error::reason("if: expected 'then'"))?;
+        if then_tok.kind != TokenKind::Then {
+            return Error::reason("if: expected 'then'").into();
+        }
+
+        let (then_branch, rest) = self.parse_expr(rest, Prec::None)?;
+
+        let (else_branch, rest) = if let Some(else_tok) = rest.first() {
+            if else_tok.kind == TokenKind::Else {
+                let (_, r) = rest.split_first().unwrap();
+                let (e, r) = self.parse_expr(r, Prec::None)?;
+                (e, r)
+            } else {
+                (Expr::Nil, rest)
+            }
+        } else {
+            (Expr::Nil, rest)
+        };
+
+        Ok((
+            Expr::List(vec![
+                Expr::Ident("if".to_string()),
+                test,
+                then_branch,
+                else_branch,
+            ]),
+            rest
+        ))
+    }
+
+    fn parse_do<'tk>(&mut self, tokens: &'tk [Token]) -> Result<(Expr, &'tk [Token]), Error> {
+        let (open, rest) = tokens.split_first().ok_or_else(|| Error::reason("do: expected { or list"))?;
+        if open.kind == TokenKind::OpenBrace {
+            let (body, rest) = self.parse_expr(rest, Prec::None)?;
+            let (close, rest) = rest.split_first().ok_or_else(|| Error::reason("do: expected }"))?;
+            if close.kind != TokenKind::CloseBrace { return Error::reason("do: expected }").into(); }
+            Ok((body, rest))
+        } else {
+            self.read_seq(tokens)
+        }
+    }
+
+    fn parse_grouped<'tk>(&mut self, tokens: &'tk [Token]) -> Result<(Expr, &'tk [Token]), Error> {
+        let (expr, rest) = self.parse_expr(tokens, Prec::None)?;
+        let (close, rest) = rest.split_first().ok_or_else(|| Error::reason("expected )"))?;
+        if close.kind != TokenKind::CloseParen { return Error::reason("expected )").into(); }
+        Ok((expr, rest))
+    }
+
+    fn parse_block<'tk>(&mut self, tokens: &'tk [Token]) -> Result<(Expr, &'tk [Token]), Error> {
+        let (expr, rest) = self.parse_expr(tokens, Prec::None)?;
+        let (close, rest) = rest.split_first().ok_or_else(|| Error::reason("expected }"))?;
+        if close.kind != TokenKind::CloseBrace { return Error::reason("expected }").into(); }
+        Ok((expr, rest))
+    }
+
+    fn desugar_infix(&self, op: &Token, left: Expr, right: Expr) -> Expr {
+        let name = match op.kind {
+            TokenKind::Plus => "+",
+            TokenKind::Minus => "-",
+            TokenKind::Mul => "*",
+            TokenKind::Div => "/",
+            TokenKind::Power => "^",
+            TokenKind::EqEq => "=",
+            TokenKind::GtEq => ">=",
+            TokenKind::Gt => ">",
+            TokenKind::LtEq => "<=",
+            TokenKind::Lt => "<",
+            TokenKind::NotEq => "!=",
+            TokenKind::Not => "!",
+            _ => return Expr::List(vec![Expr::Ident("unknown_op".into()), left, right]),
+        };
+        Expr::List(vec![Expr::Ident(name.to_string()), left, right])
     }
 
     fn parse_atom(&mut self, token: &Token) -> Result<Expr, Error> {

@@ -64,12 +64,7 @@ macro_rules! numeric_constant_func {
     ($fname:expr, $func:expr, $data:expr) => {
         $data.insert(
             $fname.to_string(),
-            Expr::Func($fname.to_string(), |args: &[Expr]| -> Result<Expr, Error> {
-                if !args.is_empty() {
-                    return Error::Reason(format!("({}): No arguments allowed in a constant function.", $fname)).into();
-                }
-                Ok(Expr::Number($func()))
-            })
+            Expr::Number($func())
         );
     };
 }

@@ -49,12 +49,12 @@ pub fn keyword(c: char, string: &str) -> Option<TokenKind> {
     use TokenKind::*;
     Some(match (c, string) {
         ('i', "f") => If,
+        ('t', "hen") => Then,
+        ('e', "lse") => Else,
         ('f', "n") => Fn,
         ('n', "il") => Nil,
         ('l', "et") => Let,
         ('d', "o") => Do,
-        ('p', "rintln") => Println,
-        ('p', "rint") => Print,
         ('t', "rue") => True,
         ('f', "alse") => False,
         _ => return None,
@@ -65,14 +65,14 @@ pub fn keyword(c: char, string: &str) -> Option<TokenKind> {
 pub enum TokenKind {
     // keywords
     If,
+    Then,
+    Else,
     Do,
     Fn,
     Let,
     Nil,
     True,
     False,
-    Print,
-    Println,
 
     // comment
     LineComment,
@@ -124,6 +124,8 @@ pub enum TokenKind {
 
     /// "="
     Equals,
+    /// "=="
+    EqEq,
     /// "=>"
     FatArrow,
 
@@ -273,13 +275,11 @@ impl Cursor<'_> {
 
 
             '~' => BitNot,
-            '=' if self.first() == '>' => FatArrow,
-            '=' => Equals,
+            '=' => self.eq(),
             '!' => self.not(),
             '<' => self.lt(),
             '>' => self.gt(),
-            '-' if self.first() == '>' => Arrow,
-            '-' => Minus,
+            '-' => self.minus(),
             '&' => BitAnd,
             '|' => BitOr,
             '+' => Plus,
@@ -574,6 +574,13 @@ impl Cursor<'_> {
         }
     }
 
+    fn minus(&mut self) -> TokenKind {
+        match self.first() {
+            '>' => {self.bump(); Arrow },
+            _ => Minus,
+        }
+    }
+
     // eats a lessthan, lessthan or equal to, or shift left operator.
     fn lt(&mut self) -> TokenKind {
         match self.first() {
@@ -588,6 +595,15 @@ impl Cursor<'_> {
         match self.first() {
             '=' => { self.bump(); NotEq },
             _ => Not,
+        }
+    }
+
+    // eats a boolean not or not equal operator.
+    fn eq(&mut self) -> TokenKind {
+        match self.first() {
+            '=' => { self.bump(); EqEq },
+            '>' => { self.bump(); FatArrow },
+            _ => Equals,
         }
     }
 

@@ -16,14 +16,14 @@ mod unescape;
 mod str_ext;
 
 fn parse_eval(expr: &str, env: &mut env::Env) -> Result<expr::Expr, error::Error> {
-    let mut parser = parse::Parser::new("<stdin>", expr);
+    let mut parser = parse::Parser::new(expr);
     let (parsed_exp, _) = parser.parse(&lex::lex("<stdin>", expr))?;
     let evaled_exp = eval::eval(&parsed_exp, env)?;
     Ok(evaled_exp)
 }
 
 fn parse_eval_all(path: &str, expr: &str, env: &mut env::Env) -> Result<expr::Expr, error::Error> {
-    let mut parser = parse::Parser::new(path, expr);
+    let mut parser = parse::Parser::new(expr);
     let tokens = lex::lex(path, expr);
     let (mut parsed_exp, mut rest) = parser.parse(&tokens)?;
     loop {
@@ -67,14 +67,14 @@ fn main() {
 
         let env = &mut env::Env::default();
         loop {
-            print!("{program_name} >>> ");
+            print!("{program_name} > ");
             let expr = slurp_expr();
             if expr.trim().is_empty() {
                 continue;
             }
             match parse_eval(&expr, env) {
                 Ok(expr::Expr::Nil) => (),
-                Ok(res) => println!("{res}\n"),
+                Ok(res) => println!("\t>>> {res}\n"),
                 Err(err) => match err {
                     error::Error::Reason(reason) => eprintln!("Error: {reason}"),
                 }

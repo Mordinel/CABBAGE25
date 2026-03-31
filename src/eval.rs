@@ -55,25 +55,26 @@ pub fn eval(exp: &Expr, env: &mut Env) -> Result<Expr, Error> {
                 None => {
                     let first_eval = eval(first_form, env)?;
                     match first_eval {
-                        Func(_name, f) => f(
-                            &arg_forms.iter()
-                                .map(|xpr| eval(xpr, env))
-                                .collect::<Result<Vec<Expr>, Error>>()?,
-                        ),
+                        Func(_name, f) => {
+                            let evaluated_args = eval_forms(arg_forms, env)?;
+                            f(&evaluated_args)
+                        },
 
-                        Lambda(l) => eval(
-                            &l.body,
-                            &mut env_for_lambda(l.args, arg_forms, env)?
-                        ),
+                        Lambda(l) => {
+                            eval(
+                                &l.body,
+                                &mut env_for_lambda(l.args, arg_forms, env)?
+                            )
+                        },
 
-                        _ => Error::reason("eval: First form must be a function").into(),
+                        _ => Ok(Expr::List(eval_forms(&list, env)?)),
                     }
                 }
             }
         },
 
-        Func(_, _) => Error::reason("eval: Unexpected form Func.").into(),
-        Lambda(_)  => Error::reason("eval: Unexpected form Lambda.").into(),
+        Func(_, _) => Ok(exp.clone()),
+        Lambda(_)  => Ok(exp.clone()),
     }
 }
 
@@ -83,11 +84,18 @@ fn env_for_lambda<'outer>(
     outer_env: &'outer mut Env,
 ) -> Result<Env<'outer>, Error> {
     let keys = Parser::parse_list_of_symbol_strings(params)?;
-    if keys.len() != arg_forms.len() {
-        return Error::Reason(format!("fn(env): Expected {} arguments, got {}", keys.len(), arg_forms.len())).into();
+
+    let mut values = eval_forms(arg_forms, outer_env)?;
+    let mut real_args = vec![];
+    if let [Expr::List(inner)] = values.as_slice() {
+        real_args.extend_from_slice(inner);
+        values = real_args;
+    }
+    if keys.len() != values.len() {
+        return Error::Reason(format!("env_for_lambda: expected {} arguments, got {}. Params: {:?}, Args: {:?}",
+                keys.len(), values.len(), keys, values)).into();
     }
 
-    let values = eval_forms(arg_forms, outer_env)?;
     Ok(Env {
         data: keys.iter()
             .zip(values.iter())
@@ -127,7 +135,7 @@ fn eval_cat_args(
     env: &mut Env,
 ) -> Result<Expr, Error> {
     if arg_forms.is_empty() {
-        return Error::Reason("cat: Expected at least one list.".to_string()).into();
+        return Error::Reason("eval_cat_args: Expected at least one list.".to_string()).into();
     }
 
     let strings = eval_into_strings(arg_forms, env)?;
@@ -150,7 +158,7 @@ fn eval_into_strings(
             .map(|p| p.unwrap())
             .collect())
     } else {
-        Error::reason("eval: Not all expressions result in strings.").into()
+        Error::Reason(format!("eval_into_strings: Not all expressions result in strings: {paths:?}")).into()
     }
 }
 
@@ -159,21 +167,21 @@ fn eval_do_args(
     env: &mut Env,
 ) -> Result<Expr, Error> {
     if arg_forms.is_empty() {
-        return Error::Reason("do: Expected at least one list.".to_string()).into();
+        return Error::Reason("eval_do_args: Expected at least one list.".to_string()).into();
     }
 
     let mut eval_res = None;
     for exp in arg_forms.iter() {
         match exp {
             Expr::List(_) => (),
-            _ => return Error::Reason("do: Expected only list expressions.".to_string()).into(),
+            _ => return Error::Reason("eval_do_args: Expected only list expressions.".to_string()).into(),
         }
         eval_res = Some(eval(exp, env));
     }
     if let Some(res) = eval_res {
         res
     } else {
-        Error::Reason("do: No expressions.".to_string()).into()
+        Error::Reason("eval_do_args: No expressions.".to_string()).into()
     }
 }
 
@@ -182,7 +190,7 @@ fn eval_src_args(
     env: &mut Env,
 ) -> Result<Expr, Error> {
     if arg_forms.is_empty() {
-        return Error::Reason("src: Expected at least one form.".to_string()).into();
+        return Error::Reason("eval_src_args: Expected at least one form.".to_string()).into();
     }
 
     let mut paths = Vec::with_capacity(arg_forms.len());
@@ -195,12 +203,12 @@ fn eval_src_args(
     for path in paths.iter() {
         let contents = match fs::read_to_string(path) {
             Ok(cont) => cont,
-            Err(why) => return Error::Reason(format!("src: could not read file `{path}`: {why}")).into(),
+            Err(why) => return Error::Reason(format!("eval_src_args: could not read file `{path}`: {why}")).into(),
         };
         let tokens = lex::lex(path, &contents);
-        let mut parser = Parser::new(path, &contents);
+        let mut parser = Parser::new(&contents);
         if let Err(why) = eval_all(&mut parser, &tokens, env) {
-            return Error::Reason(format!("src: {why}")).into();
+            return Error::Reason(format!("eval_src_args: {why}")).into();
         }
     }
 
@@ -213,7 +221,7 @@ fn eval_all(parser: &mut Parser, tokens: &[Token], env: &mut Env) -> Result<(), 
         let (exp, rest) = match parser.parse(remaining) {
             Ok(p) => p,
             Err(why) => return Error::Reason(
-                format!("could not parse program: {why}")
+                format!("eval_all: could not parse program: {why}")
             ).into(),
         };
         let _ = eval(&exp, env)?;
@@ -227,13 +235,13 @@ fn eval_all(parser: &mut Parser, tokens: &[Token], env: &mut Env) -> Result<(), 
 
 fn eval_lambda_args(arg_forms: &[Expr]) -> Result<Expr, Error> {
     let params = arg_forms.first()
-        .ok_or_else(|| Error::reason("fn: Expected args form."))?;
+        .ok_or_else(|| Error::reason("eval_lambda_args: Expected args form."))?;
 
     let body = arg_forms.get(1)
-        .ok_or_else(|| Error::reason("fn: Expected second form."))?;
+        .ok_or_else(|| Error::reason("eval_lambda_args: Expected second form."))?;
 
     if arg_forms.len() > 2 {
-        return Error::reason("fn: can only have two forms.").into();
+        return Error::reason("eval_lambda_args: can only have two forms.").into();
     }
 
     Ok(Expr::Lambda(
@@ -248,24 +256,20 @@ fn eval_if_args(
     arg_forms: &[Expr],
     env: &mut Env,
 ) -> Result<Expr, Error> {
-    let test_form = arg_forms.first()
-        .ok_or_else(|| Error::reason("if: Expected test form"))?;
+    if arg_forms.len() < 2 {
+        return Error::reason("eval_if_args: Expected at least test and then branch").into();
+    }
+
+    let test_form = &arg_forms[0];
+    let then_form = &arg_forms[1];
+    let else_form = arg_forms.get(2).unwrap_or(&Expr::Nil);
 
     let test_eval = eval(test_form, env)?;
+
     match test_eval {
-        Expr::Bool(b) => {
-            let form_idx = if b { 1 } else { 2 };
-            let default_case = Expr::Nil;
-            let res_form = if b {
-                arg_forms.get(1)
-                    .ok_or_else(|| Error::Reason(format!("if: Expected form idx='{form_idx}'")))?
-            } else {
-                arg_forms.get(2)
-                    .unwrap_or(&default_case)
-            };
-            eval(res_form, env)
-        },
-        _ => Error::Reason(format!("if: Unexpected test form='{test_form}'")).into(),
+        Expr::Bool(true) => eval(then_form, env),
+        Expr::Bool(false) => eval(else_form, env),
+        _ => Error::Reason(format!("eval_if_args: test did not evaluate to bool, got {:?}", test_eval)).into(),
     }
 }
 
@@ -274,18 +278,18 @@ fn eval_let_args(
     env: &mut Env,
 ) -> Result<Expr, Error> {
     let first_form = arg_forms.first()
-        .ok_or_else(|| Error::reason("let: Expected first form."))?;
+        .ok_or_else(|| Error::reason("eval_let_args: Expected first form."))?;
 
     let first_str = match first_form {
         Expr::Ident(i) => Ok(i.clone()),
-        _ => Error::reason("let: Expected first form to be an ident").into(),
+        _ => Error::reason("eval_let_args: Expected first form to be an ident").into(),
     }?;
 
     let second_form = arg_forms.get(1)
-        .ok_or_else(|| Error::reason("let: Expected second form."))?;
+        .ok_or_else(|| Error::reason("eval_let_args: Expected second form."))?;
 
     if arg_forms.len() > 2 {
-        return Error::reason("let: can only have two forms.").into();
+        return Error::reason("eval_let_args: can only have two forms.").into();
     }
 
     let second_eval = eval(second_form, env)?;
