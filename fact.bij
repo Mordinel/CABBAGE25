@@ -1,5 +1,1 @@
-
-(let fact (fn (n)
-    (do (if (= 1 n) n 
-        (* n (fact (- n 1)))))))
-
+let fact = fn n { if n <= 1 then n else n * fact(n - 1) }

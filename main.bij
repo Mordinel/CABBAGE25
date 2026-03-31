@@ -1,5 +1,0 @@
-
-(src "fact.bij")
-
-(println (fact 2000))
-
