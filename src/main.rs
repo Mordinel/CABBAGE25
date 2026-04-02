@@ -15,27 +15,14 @@ mod eval;
 mod unescape;
 mod str_ext;
 
-fn parse_eval(expr: &str, env: &mut env::Env) -> Result<expr::Expr, error::Error> {
-    let mut parser = parse::Parser::new(expr);
-    let (parsed_exp, _) = parser.parse(&lex::lex("<stdin>", expr))?;
-    let evaled_exp = eval::eval(&parsed_exp, env)?;
-    Ok(evaled_exp)
+fn parse_eval(path: &str, code: &str, env: &mut env::Env) -> Result<expr::Expr, error::Error> {
+    let mut parser = parse::Parser::new(code);
+    let (parsed_expr, _) = parser.parse(&lex::lex(path, code))?;
+    let evaled_expr = eval::eval(&parsed_expr, env)?;
+    Ok(evaled_expr)
 }
 
-fn parse_eval_all(path: &str, expr: &str, env: &mut env::Env) -> Result<expr::Expr, error::Error> {
-    let mut parser = parse::Parser::new(expr);
-    let tokens = lex::lex(path, expr);
-    let (mut parsed_exp, mut rest) = parser.parse(&tokens)?;
-    loop {
-        let result = eval::eval(&parsed_exp, env)?;
-        if rest.is_empty() {
-            return Ok(result);
-        }
-        (parsed_exp, rest) = parser.parse(&rest)?;
-    }
-}
-
-fn slurp_expr() -> String {
+fn read_input_line() -> String {
     let mut expr = String::new();
     io::stdout().flush()
         .expect("Failed to flush stdout.");
@@ -68,11 +55,11 @@ fn main() {
         let env = &mut env::Env::default();
         loop {
             print!("{program_name} > ");
-            let expr = slurp_expr();
-            if expr.trim().is_empty() {
+            let code = read_input_line();
+            if code.trim().is_empty() {
                 continue;
             }
-            match parse_eval(&expr, env) {
+            match parse_eval("<stdin>", &code, env) {
                 Ok(expr::Expr::Nil) => (),
                 Ok(res) => println!("\t>>> {res}\n"),
                 Err(err) => match err {
@@ -93,7 +80,7 @@ fn main() {
             },
         };
         let env = &mut env::Env::default();
-        match parse_eval_all(path, contents.trim(), env) {
+        match parse_eval(path, contents.trim(), env) {
             Ok(_) => (),
             Err(err) => match err {
                 error::Error::Reason(reason) => eprintln!("Error: {reason}"),

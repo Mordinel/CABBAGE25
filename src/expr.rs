@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use number::Number;
 
-use crate::{env::Env, error::Error};
+use crate::error::Error;
 
 #[derive(Debug, Clone)]
 pub enum Expr {
@@ -38,14 +38,14 @@ impl fmt::Display for Expr {
             Expr::Char(c) => c.to_string(),
             Expr::String(s) => s.to_string(),
             Expr::List(list) => format!(
-                "({})",
+                "[{}]",
                 list.iter()
                     .map(|i| i.to_string())
                     .intersperse(",".to_string())
                     .collect::<String>(),
             ),
             Expr::Func(name, _fun) => format!("Function {{{name}}}"),
-            Expr::Lambda(_l) => format!("Lambda {{}}"),
+            Expr::Lambda(l) => format!("Lambda fn {} {{ {} }}", l.args, l.body),
         };
         write!(f, "{}", str)
     }

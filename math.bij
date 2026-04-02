@@ -1,0 +1,12 @@
+println "Math demo in CABBAGE25:";
+
+print "\t 2+3+4+5 = \t"; println (2 + 3 + 4 + 5);
+print "\t10*20*30 = \t"; println (10*20*30);
+print "\t   100/7 = \t"; println (100/7);
+print "\t 100/7.0 = \t"; println (100/7.0);
+print "\t  sqrt 2 = \t"; println (sqrt 2);
+print "\t   exp 1 = \t"; println (exp 1);
+print "\t       e = \t"; println e;
+print "\t acos -1 = \t"; println (acos -1);
+print "\t      pi = \t"; println pi;
+print "\t 2+i * i = \t"; println ((2+i) * i);

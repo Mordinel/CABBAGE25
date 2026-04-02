@@ -1,3 +1,4 @@
+use std::ops::Not;
 use std::rc::Rc;
 
 use crate::error::Error;
@@ -45,16 +46,21 @@ impl<'src> Parser<'src> {
     }
 
     pub fn parse<'tk>(&mut self, tokens: &'tk [Token]) -> Result<(Expr, &'tk [Token]), Error> {
-        self.parse_expr(tokens, Prec::None)
+        self.parse_toplevel(tokens)
     }
 
-    fn parse_expr<'tk>(&mut self, tokens: &'tk [Token], min_prec: Prec) -> Result<(Expr, &'tk [Token]), Error> {
+    fn parse_expr<'tk>(
+        &mut self,
+        tokens: &'tk [Token],
+        min_prec: Prec,
+    ) -> Result<(Expr, &'tk [Token]), Error> {
         if tokens.is_empty() {
-            return Error::reason("empty expression").into();
+            return Error::reason("parse_expr: empty expression").into();
         }
 
         let (mut left, mut rest) = self.parse_prefix(tokens)?;
 
+        // infix operator
         while let Some(op) = rest.first() {
             let op_prec = self.precedence(&op.kind);
             if op_prec.lbp() <= min_prec.lbp() {
@@ -65,6 +71,7 @@ impl<'src> Parser<'src> {
             rest = new_rest;
         }
 
+        // function call
         while let Some(next) = rest.first() {
             if self.is_start_of_expr(next) {
                 let (arg, new_rest) = self.parse_expr(rest, Prec::Call)?;
@@ -109,7 +116,6 @@ impl<'src> Parser<'src> {
             Let => self.parse_let(rest),
             Fn => self.parse_fn(rest),
             If => self.parse_if(rest),
-            Do => self.parse_do(rest),
             OpenParen => self.parse_grouped(rest),
             OpenBrace => self.parse_block(rest),
             _ => Ok((self.parse_atom(tok)?, rest)),
@@ -127,31 +133,6 @@ impl<'src> Parser<'src> {
                 _ => Error::Reason("Expected identifiers in the argument list.".to_string()).into(),
             })
         .collect()
-    }
-
-    fn read_seq<'tk>(&mut self, tokens: &'tk [Token]) -> Result<(Expr, &'tk [Token]), Error> {
-        let mut list_items: Vec<Expr> = vec![];
-        let mut excess = tokens;
-        loop {
-            let (next_token, rest) = excess.split_first()
-                .ok_or_else(|| Error::Reason("seq: Could not find closing `)`.".to_string()))?;
-
-            match next_token.kind {
-                TokenKind::CloseParen => 
-                    return Ok((Expr::List(list_items), rest)), // skip `)`, head to the token after
-
-                TokenKind::WhiteSpace | TokenKind::Newline => {
-                    let (_, new_excess) = excess.split_first()
-                        .ok_or_else(|| Error::reason("seq: Could not find closing `)`."))?;
-                    excess = new_excess;
-                    continue
-                },
-                _ => (),
-            }
-            let (item, new_excess) = self.parse(&excess)?;
-            list_items.push(item);
-            excess = new_excess;
-        }
     }
 
     fn parse_literal(&self, token: &Token) -> Result<Expr, Error> {
@@ -256,16 +237,9 @@ impl<'src> Parser<'src> {
         if open.kind != TokenKind::OpenBrace {
             return Error::reason("fn: expected {").into();
         }
-
         rest = new_rest;
 
-        let (body, new_rest) = self.parse_expr(rest, Prec::None)?;
-
-        let (close, rest) = new_rest.split_first()
-            .ok_or_else(|| Error::reason("fn: expected }"))?;
-        if close.kind != TokenKind::CloseBrace {
-            return Error::reason("fn: expected }").into();
-        }
+        let (body, rest) = self.parse_block(rest)?;
 
         let params_list = Expr::List(params);
         Ok((
@@ -312,29 +286,73 @@ impl<'src> Parser<'src> {
         ))
     }
 
-    fn parse_do<'tk>(&mut self, tokens: &'tk [Token]) -> Result<(Expr, &'tk [Token]), Error> {
-        let (open, rest) = tokens.split_first().ok_or_else(|| Error::reason("do: expected { or list"))?;
-        if open.kind == TokenKind::OpenBrace {
-            let (body, rest) = self.parse_expr(rest, Prec::None)?;
-            let (close, rest) = rest.split_first().ok_or_else(|| Error::reason("do: expected }"))?;
-            if close.kind != TokenKind::CloseBrace { return Error::reason("do: expected }").into(); }
-            Ok((body, rest))
-        } else {
-            self.read_seq(tokens)
-        }
-    }
-
     fn parse_grouped<'tk>(&mut self, tokens: &'tk [Token]) -> Result<(Expr, &'tk [Token]), Error> {
         let (expr, rest) = self.parse_expr(tokens, Prec::None)?;
-        let (close, rest) = rest.split_first().ok_or_else(|| Error::reason("expected )"))?;
-        if close.kind != TokenKind::CloseParen { return Error::reason("expected )").into(); }
+        let (close, rest) = rest.split_first().ok_or_else(|| Error::reason("parse_grouped: expected )"))?;
+        if close.kind != TokenKind::CloseParen { return Error::reason("parse_grouped: expected )").into(); }
+        Ok((expr, rest))
+    }
+
+    fn parse_toplevel<'tk>(&mut self, tokens: &'tk [Token]) -> Result<(Expr, &'tk [Token]), Error> {
+        let mut exprs = Vec::new();
+        exprs.push(Expr::Ident("do".to_string()));
+
+        let (mut expr, mut rest) = self.parse_expr(tokens, Prec::None)?;
+        exprs.push(expr);
+
+        while rest.is_empty().not() {
+            if rest[0].kind == TokenKind::Semi {
+                rest = &rest[1..];
+            }
+            if rest.is_empty() {
+                break;
+            }
+            let (expr, next_rest) = self.parse_expr(rest, Prec::None)?;
+            rest = next_rest;
+            exprs.push(expr);
+        }
+
+        expr = Expr::List(exprs);
+
         Ok((expr, rest))
     }
 
     fn parse_block<'tk>(&mut self, tokens: &'tk [Token]) -> Result<(Expr, &'tk [Token]), Error> {
-        let (expr, rest) = self.parse_expr(tokens, Prec::None)?;
-        let (close, rest) = rest.split_first().ok_or_else(|| Error::reason("expected }"))?;
-        if close.kind != TokenKind::CloseBrace { return Error::reason("expected }").into(); }
+        let mut exprs = Vec::new();
+        exprs.push(Expr::Ident("do".to_string()));
+
+        let (mut expr, mut rest) = self.parse_expr(tokens, Prec::None)?;
+        exprs.push(expr);
+
+        while rest.is_empty().not() {
+            // non semicolon, end of block
+            if rest[0].kind != TokenKind::Semi {
+                break;
+            }
+
+            // semicolon at end of loop, insert a Nil and skip the semicolon.
+            if rest[1].kind == TokenKind::CloseBrace {
+                exprs.push(Expr::Nil);
+                let (_, inner) = rest.split_first().unwrap();
+                rest = inner;
+                break;
+            }
+
+            // next expression
+            let (expr, next_rest) = self.parse_expr(&rest[1..], Prec::None)?;
+            rest = next_rest;
+            exprs.push(expr);
+        }
+
+        let (close, rest) = rest.split_first()
+            .ok_or_else(|| Error::Reason(format!("parse_block: expected }}, but no close, got: {:?}", rest)))?;
+
+        if close.kind != TokenKind::CloseBrace {
+            return Error::Reason(format!("parse_block: expected }}, got: {:?}", close.kind)).into();
+        }
+        
+        expr = Expr::List(exprs);
+
         Ok((expr, rest))
     }
 
