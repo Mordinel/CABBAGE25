@@ -18,6 +18,12 @@ pub enum Expr {
     Lambda(Lambda),
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Lambda {
+    pub args: Rc<Expr>,
+    pub body: Rc<Expr>,
+}
+
 impl PartialEq for Expr {
     fn eq(&self, other: &Self) -> bool {
         use Expr::*;
@@ -49,11 +55,5 @@ impl fmt::Display for Expr {
         };
         write!(f, "{}", str)
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Lambda {
-    pub args: Rc<Expr>,
-    pub body: Rc<Expr>,
 }
 
